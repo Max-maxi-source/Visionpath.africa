@@ -3,10 +3,20 @@
 session_start();
 require_once 'config.php';
 
-// Access control: only teachers allowed
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'teacher') {
+// Access control: only an active teacher may create projects.
+$current_user_id = (int) ($_SESSION['user_id'] ?? 0);
+$teacher_stmt = $conn->prepare("SELECT id, name, school_name, assigned_class FROM users WHERE id = ? AND role = 'teacher' AND is_verified = 1 LIMIT 1");
+$teacher_stmt->bind_param('i', $current_user_id);
+$teacher_stmt->execute();
+$teacher = $teacher_stmt->get_result()->fetch_assoc();
+$teacher_stmt->close();
+
+if (!$teacher) {
     die("Access Denied. Only teachers can access this page. <a href='login.php'>Login here</a>");
 }
+
+$teacher_school = $teacher['school_name'];
+$teacher_class = $teacher['assigned_class'];
 
 $error = '';
 $success = '';
@@ -24,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         // Validate student exists and is in the same school/class
         $stmt_check = $conn->prepare("SELECT id, name, email FROM users WHERE id = ? AND role = 'student' AND school_name = ? AND assigned_class = ?");
-        $stmt_check->bind_param("iss", $student_id, $_SESSION['school_name'], $_SESSION['assigned_class']);
+        $stmt_check->bind_param("iss", $student_id, $teacher_school, $teacher_class);
         $stmt_check->execute();
         $result = $stmt_check->get_result();
         
@@ -57,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (empty($error)) {
                 // Insert project
                 $stmt_insert = $conn->prepare("INSERT INTO projects (student_id, uploaded_by_teacher_id, project_title, project_description, cbc_strand, project_documentation) VALUES (?, ?, ?, ?, ?, ?)");
-                $teacher_id = $_SESSION['user_id'];
+                $teacher_id = $current_user_id;
                 $stmt_insert->bind_param("iissss", $student_id, $teacher_id, $project_title, $project_description, $cbc_strand, $doc_path);
                 
                 if ($stmt_insert->execute()) {
@@ -91,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Fetch all students for this teacher to populate the dropdown
 $stmt_students = $conn->prepare("SELECT id, name, admission_number FROM users WHERE role = 'student' AND school_name = ? AND assigned_class = ? ORDER BY name ASC");
-$stmt_students->bind_param("ss", $_SESSION['school_name'], $_SESSION['assigned_class']);
+$stmt_students->bind_param("ss", $teacher_school, $teacher_class);
 $stmt_students->execute();
 $students_list = $stmt_students->get_result();
 ?>

@@ -19,10 +19,34 @@ CREATE TABLE IF NOT EXISTS student_transfers (
     INDEX idx_student_transfers_from_to (from_school_id, to_school_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS transfer_status ENUM('normal', 'transfer_pending') NOT NULL DEFAULT 'normal' AFTER school_id,
-    ADD COLUMN IF NOT EXISTS class_id INT NULL AFTER assigned_class,
-    ADD CONSTRAINT fk_users_class FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE SET NULL ON UPDATE CASCADE;
+SELECT COUNT(*) INTO @has_transfer_status
+FROM information_schema.COLUMNS
+WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'transfer_status';
+SET @transfer_sql = IF(@has_transfer_status = 0,
+    "ALTER TABLE users ADD COLUMN transfer_status ENUM('normal', 'transfer_pending') NOT NULL DEFAULT 'normal' AFTER school_id",
+    'SELECT 1');
+PREPARE transfer_stmt FROM @transfer_sql;
+EXECUTE transfer_stmt;
+DEALLOCATE PREPARE transfer_stmt;
 
-ALTER TABLE users
-    ADD INDEX idx_users_transfer_status (transfer_status);
+SELECT COUNT(*) INTO @has_class_id
+FROM information_schema.COLUMNS
+WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'class_id';
+SET @class_sql = IF(@has_class_id = 0,
+    'ALTER TABLE users ADD COLUMN class_id INT NULL AFTER assigned_class',
+    'SELECT 1');
+PREPARE class_stmt FROM @class_sql;
+EXECUTE class_stmt;
+DEALLOCATE PREPARE class_stmt;
+
+SELECT COUNT(*) INTO @has_assigned_class
+FROM information_schema.COLUMNS
+WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'assigned_class';
+SET @assigned_class_sql = IF(@has_assigned_class = 0,
+    'ALTER TABLE users ADD COLUMN assigned_class VARCHAR(100) NULL AFTER school_name',
+    'SELECT 1');
+PREPARE assigned_class_stmt FROM @assigned_class_sql;
+EXECUTE assigned_class_stmt;
+DEALLOCATE PREPARE assigned_class_stmt;
+
+CREATE INDEX idx_users_transfer_status ON users (transfer_status);

@@ -1,5 +1,7 @@
 USE visionpath_db;
 
+ALTER TABLE users MODIFY COLUMN role ENUM('student', 'teacher', 'parent', 'mentor', 'super_admin', 'junior_admin') NOT NULL;
+UPDATE users SET role = 'junior_admin' WHERE (role = '' OR role IS NULL) AND assigned_class = 'Junior Admin';
 ALTER TABLE users ENGINE=InnoDB;
 ALTER TABLE verification_codes ENGINE=InnoDB;
 ALTER TABLE projects ENGINE=InnoDB;
@@ -70,6 +72,16 @@ CREATE TABLE IF NOT EXISTS student_transfers (
 
 -- Verification codes table updates
 ALTER TABLE verification_codes CHANGE COLUMN parent_email email VARCHAR(100) NOT NULL;
+
+CREATE TABLE IF NOT EXISTS password_resets (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(100) NOT NULL,
+    code_hash CHAR(64) NOT NULL,
+    expires_at DATETIME NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_password_resets_email (email),
+    INDEX idx_password_resets_expires (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Projects table updates
 -- Drop the existing foreign key and column

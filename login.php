@@ -111,6 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </form>
     
     <div class="links">
+        <a href="forgot_password.php">Forgot your password?</a><br><br>
         Don't have an account? <a href="register.php">Register Now</a>
     </div>
 </div>

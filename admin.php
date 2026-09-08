@@ -50,6 +50,13 @@ function ensure_admin_schema($conn) {
     ];
 
     try {
+        $conn->query("ALTER TABLE users MODIFY COLUMN role ENUM('student', 'teacher', 'parent', 'mentor', 'super_admin', 'junior_admin') NOT NULL");
+        $conn->query("UPDATE users SET role = 'junior_admin' WHERE (role = '' OR role IS NULL) AND assigned_class = 'Junior Admin'");
+    } catch (Exception $e) {
+        error_log('Admin schema role check failed: ' . $e->getMessage());
+    }
+
+    try {
         $class_check = $conn->query("SHOW COLUMNS FROM classes LIKE 'stream'");
         if ($class_check && $class_check->num_rows === 0) {
             $conn->query("ALTER TABLE classes ADD COLUMN stream VARCHAR(100) NULL AFTER class_name");
@@ -107,7 +114,7 @@ if (!$logged_in && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['admin_
     if ($admin_email === '' || $admin_password === '') {
         $errors[] = 'Please enter both the admin email and password.';
     } else {
-        $stmt = $conn->prepare("SELECT id, name, email, password_hash, role, school_id FROM users WHERE email = ? AND (role IN ('super_admin', 'junior_admin') OR (role = '' AND assigned_class = 'Junior Admin')) LIMIT 1");
+        $stmt = $conn->prepare("SELECT id, name, email, password_hash, role, school_id, school_name FROM users WHERE email = ? AND (role IN ('super_admin', 'junior_admin') OR (role = '' AND assigned_class = 'Junior Admin')) LIMIT 1");
         if ($stmt) {
             $stmt->bind_param('s', $admin_email);
             $stmt->execute();
@@ -1016,6 +1023,7 @@ if (!$logged_in) {
                     <input type="password" name="admin_password" placeholder="Password" required>
                     <button type="submit">Access Dashboard</button>
                 </form>
+                <p><a href="forgot_password.php">Forgot your password?</a></p>
             </div>
         </div>
     <?php else: ?>
