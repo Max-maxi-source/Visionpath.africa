@@ -2,10 +2,10 @@
 // register.php (updated with Mentor registration)
 session_start();
 require_once 'config.php';
+require_once 'send_mail.php';
 
 $error = '';
 $success = '';
-$simulated_email = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $role = $_POST['role'] ?? 'student';
@@ -24,15 +24,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $mentorship_capacity = intval($_POST['mentorship_capacity'] ?? 0);
     $professional_bio = trim($_POST['professional_bio'] ?? '');
 
-    if ($role === 'teacher') {
-        $error = "Teacher accounts can only be created by the Junior Admin assigned to the school.";
-    } elseif (empty($full_name) || empty($email) || empty($password)) {
+    // Basic validation common to all roles
+    if (empty($full_name) || empty($email) || empty($password)) {
         $error = "Name, Email and Password are required.";
     } else {
         // Role‑specific validation
         if ($role === 'student') {
             if (empty($school_name) || empty($assigned_class) || empty($admission_number)) {
                 $error = "All student fields are required.";
+            }
+        } elseif ($role === 'teacher') {
+            if (empty($school_name) || empty($assigned_class)) {
+                $error = "All teacher fields are required.";
             }
         } elseif ($role === 'mentor') {
             // Corporate email domain check
@@ -60,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (empty($error)) {
-        $password_hash = password_hash($password, PASSWORD_DEFAULT);
+        $password_hash = password_hash($password, PASSWORD_BCRYPT);
         $is_verified = 0; // pending verification
         // Insert into users table – note that admission_number, school_name, assigned_class may be NULL for mentors
         $stmt_ins = $conn->prepare("INSERT INTO users (admission_number, name, school_name, assigned_class, email, password_hash, role, is_verified) VALUES (?,?,?,?,?,?,?,?)");
@@ -83,23 +86,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt_mentor->execute();
                 $stmt_mentor->close();
             }
-            // Generate verification code
-            $code = str_pad(mt_rand(0, 999999), 6, '0', STR_PAD_LEFT);
-            $stmt_code = $conn->prepare("INSERT INTO verification_codes (email, code) VALUES (?, ?)");
-            $stmt_code->bind_param("ss", $email, $code);
+            // Store only a hash; the raw code is delivered by email.
+            $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+            $code_hash = password_hash($code, PASSWORD_DEFAULT);
+            $expires_at = date('Y-m-d H:i:s', time() + 900);
+            $stmt_code = $conn->prepare("INSERT INTO verification_codes (email, code_hash, expires_at) VALUES (?, ?, ?)");
+            $stmt_code->bind_param("sss", $email, $code_hash, $expires_at);
             $stmt_code->execute();
             $stmt_code->close();
 
-            // Send email (or simulate locally)
-                $subject = "VisionPath - Verify Your Mentor Account";
-            $message = "Hello $full_name,\n\nYour verification code is: $code\n\nEnter it on the verification page to activate your account.";
-                $headers = "From: noreply@visionpath.local\r\nReply-To: noreply@visionpath.local\r\nX-Mailer: PHP/" . phpversion();
-            @mail($email, $subject, $message, $headers);
-            $simulated_email = "Local Testing Notice: Mentor code <strong>$code</strong>.";
+            try {
+                send_verification_email($email, $full_name, $code);
+            } catch (Throwable $mail_error) {
+                error_log('Verification email failed: ' . $mail_error->getMessage());
+                $stmt_cleanup = $conn->prepare("DELETE FROM verification_codes WHERE email = ?");
+                $stmt_cleanup->bind_param("s", $email);
+                $stmt_cleanup->execute();
+                $stmt_cleanup->close();
+                $error = "Registration could not send a verification email. Please try again.";
+            }
 
-            $_SESSION['verify_email'] = $email;
-            $_SESSION['verify_role'] = $role;
-            $success = "Registration successful! Please verify your account.";
+            if (empty($error)) {
+                $_SESSION['verify_email'] = $email;
+                $_SESSION['verify_role'] = $role;
+                header('Location: verify_code.php');
+                exit;
+            }
         } else {
             $error = "Database error during registration. Please try again.";
         }
@@ -143,23 +155,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <?php if ($error): ?><div class="error"><?php echo htmlspecialchars($error); ?></div><?php endif; ?>
     <?php if ($success): ?>
         <div class="success"><?php echo htmlspecialchars($success); ?></div>
-        <?php if ($simulated_email): ?><div class="notice"><?php echo $simulated_email; ?></div><?php endif; ?>
-        <a href="verify.php" style="display:block;text-align:center;padding:12px;background:#28a745;color:white;text-decoration:none;border-radius:6px;font-weight:600;margin-top:15px;">Proceed to Verification</a>
+        <a href="verify_code.php" style="display:block;text-align:center;padding:12px;background:#28a745;color:white;text-decoration:none;border-radius:6px;font-weight:600;margin-top:15px;">Proceed to Verification</a>
     <?php else: ?>
         <form method="POST" action="" enctype="multipart/form-data">
             <div class="role-selector">
                 <label class="role-btn active" id="btn_student"><input type="radio" name="role" value="student" checked onchange="toggleForm()"> Student</label>
+                <label class="role-btn" id="btn_teacher"><input type="radio" name="role" value="teacher" onchange="toggleForm()"> Teacher</label>
                 <label class="role-btn" id="btn_mentor"><input type="radio" name="role" value="mentor" onchange="toggleForm()"> Mentor</label>
             </div>
             <!-- Common fields -->
             <div class="form-group"><label for="full_name">Full Name</label><input type="text" id="full_name" name="full_name" required placeholder="John Doe"></div>
-            <div class="form-group" id="group_email"><label for="email"><span id="email_label">Parent/Guardian Email Address</span></label><input type="email" id="email" name="email" required placeholder="parent@example.com"></div>
+            <div class="form-group" id="group_email"><label for="email">Email Address</label><input type="email" id="email" name="email" required placeholder="email@company.com"></div>
             <div class="form-group" id="group_password"><label for="password">Password</label><input type="password" id="password" name="password" required></div>
             <!-- Student fields -->
             <div id="student_fields">
                 <div class="form-group"><label for="admission_number">Admission Number</label><input type="text" id="admission_number" name="admission_number" placeholder="e.g. 10456"></div>
                 <div class="form-group"><label for="school_name">School Name</label><input type="text" id="school_name" name="school_name" placeholder="e.g. Nairobi High"></div>
-                <div class="form-group"><label for="assigned_class">Your Class/Grade</label><input type="text" id="assigned_class" name="assigned_class" placeholder="e.g. Grade 7 East"></div>
+                <div class="form-group"><label for="assigned_class">Assigned Class / Grade</label><input type="text" id="assigned_class" name="assigned_class" placeholder="e.g. Grade 7 East"></div>
+            </div>
+            <!-- Teacher fields -->
+            <div id="teacher_fields" style="display:none;">
+                <div class="form-group"><label for="school_name_t">School Name</label><input type="text" id="school_name_t" name="school_name" placeholder="e.g. Nairobi High"></div>
+                <div class="form-group"><label for="assigned_class_t">Assigned Class / Grade</label><input type="text" id="assigned_class_t" name="assigned_class" placeholder="e.g. Grade 7 East"></div>
             </div>
             <!-- Mentor fields -->
             <div id="mentor_fields" style="display:none;">
@@ -186,32 +203,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 function toggleForm(){
     const role = document.querySelector('input[name="role"]:checked').value;
     const btnStudent=document.getElementById('btn_student');
+    const btnTeacher=document.getElementById('btn_teacher');
     const btnMentor=document.getElementById('btn_mentor');
-    const fieldGroups = {
-        student: document.getElementById('student_fields'),
-        mentor: document.getElementById('mentor_fields')
-    };
     // Reset all
     btnStudent.classList.remove('active');
+    btnTeacher.classList.remove('active');
     btnMentor.classList.remove('active');
-    Object.values(fieldGroups).forEach(group => {
-        group.style.display='none';
-        group.querySelectorAll('input, select, textarea').forEach(field => field.disabled=true);
-    });
+    document.getElementById('student_fields').style.display='none';
+    document.getElementById('teacher_fields').style.display='none';
+    document.getElementById('mentor_fields').style.display='none';
     // Show appropriate
     if(role==='student'){
         btnStudent.classList.add('active');
-        fieldGroups.student.style.display='block';
-        fieldGroups.student.querySelectorAll('input, select, textarea').forEach(field => field.disabled=false);
-        document.getElementById('email_label').innerText='Parent/Guardian Email Address';
-        document.getElementById('email').placeholder='parent@example.com';
+        document.getElementById('student_fields').style.display='block';
         document.getElementById('submit_btn').innerText='Register as Student';
+    } else if(role==='teacher'){
+        btnTeacher.classList.add('active');
+        document.getElementById('teacher_fields').style.display='block';
+        document.getElementById('submit_btn').innerText='Register as Teacher';
     } else if(role==='mentor'){
         btnMentor.classList.add('active');
-        fieldGroups.mentor.style.display='block';
-        fieldGroups.mentor.querySelectorAll('input, select, textarea').forEach(field => field.disabled=false);
-        document.getElementById('email_label').innerText='Institution Email Address';
-        document.getElementById('email').placeholder='name@institution.org';
+        document.getElementById('mentor_fields').style.display='block';
         document.getElementById('submit_btn').innerText='Register as Mentor';
     }
 }

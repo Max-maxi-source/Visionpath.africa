@@ -118,6 +118,12 @@ session_start();
             box-shadow: 0 6px 20px rgba(247, 127, 0, 0.4);
         }
 
+        /* Logo image styling */
+        .site-logo { height:56px; width:auto; display:block; border-radius:10px; box-shadow: 0 8px 30px rgba(2,6,23,0.08); }
+        .brand-text { display:flex; flex-direction:column; line-height:1; }
+        .brand-text .logo-name { font-weight:800; color:var(--primary-color); font-size:20px; }
+        .brand-text .tagline { font-size:12px; color:#475569; opacity:0.9; }
+
         /* Hero Section */
         .hero {
             min-height: 100vh;
@@ -277,7 +283,13 @@ session_start();
 <body>
 
 <header>
-    <a href="index.php" class="logo">Vision<span>Path</span></a>
+    <a href="index.php" class="logo">
+        <img src="assets/logo.svg" alt="VisionPath logo" class="site-logo">
+        <div class="brand-text" style="margin-left:12px;">
+            <div class="logo-name">VisionPath</div>
+            <div class="tagline">Discover Purpose Early.</div>
+        </div>
+    </a>
     <nav class="nav-links">
         <?php if(isset($_SESSION['user_id'])): ?>
             <a href="<?php echo ($_SESSION['role'] === 'teacher') ? 'add_project.php' : 'portfolio.php'; ?>" class="btn-main" style="padding: 10px 24px; box-shadow:none;">My Dashboard</a>

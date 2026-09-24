@@ -4,6 +4,12 @@ session_start();
 require_once 'config.php';
 
 $error = '';
+$success_message = '';
+
+if (isset($_SESSION['reset_success'])) {
+    $success_message = $_SESSION['reset_success'];
+    unset($_SESSION['reset_success']);
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $identifier = trim($_POST['identifier'] ?? '');
@@ -12,7 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($identifier) || empty($password)) {
         $error = "Please enter your Admission Number/Email and Password.";
     } else {
-        $stmt = $conn->prepare("SELECT id, admission_number, name, email, password_hash, role, is_verified, school_name, assigned_class, school_id FROM users WHERE admission_number = ? OR email = ?");
+        $stmt = $conn->prepare("SELECT id, admission_number, name, email, password_hash, role, is_verified, school_name, assigned_class FROM users WHERE admission_number = ? OR email = ?");
         $stmt->bind_param("ss", $identifier, $identifier);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -32,15 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['school_name'] = $user['school_name'];
                     $_SESSION['assigned_class'] = $user['assigned_class'];
                     
-                    if ($user['role'] === 'super_admin' || $user['role'] === 'junior_admin') {
-                        $_SESSION['admin_logged_in'] = true;
-                        $_SESSION['admin_user_id'] = (int) $user['id'];
-                        $_SESSION['admin_role'] = $user['role'];
-                        $_SESSION['admin_name'] = $user['name'];
-                        $_SESSION['school_id'] = isset($user['school_id']) ? (int) $user['school_id'] : null;
-                        header("Location: admin.php");
-                        exit;
-                    } elseif ($user['role'] === 'student') {
+                    if ($user['role'] === 'student') {
                         header("Location: portfolio.php");
                         exit;
                     } elseif ($user['role'] === 'teacher') {
@@ -95,6 +93,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <?php if ($error): ?>
         <div class="error"><?php echo $error; ?></div>
     <?php endif; ?>
+
+    <?php if ($success_message): ?>
+        <div class="success" style="color:#155724;background:#d4edda;border:1px solid #c3e6cb;padding:10px;border-radius:6px;margin-bottom:15px;text-align:center;">
+            <?php echo htmlspecialchars($success_message, ENT_QUOTES, 'UTF-8'); ?>
+        </div>
+    <?php endif; ?>
     
     <form method="POST" action="">
         <div class="form-group">
@@ -108,10 +112,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
         
         <button type="submit">Login</button>
+
+        <div class="form-group" style="margin-top:12px; margin-bottom:0;">
+            <div style="text-align:right;">
+                <a href="forgot_password.php" style="color:#0056b3; text-decoration:none; font-weight:600;">Forgot Password?</a>
+            </div>
+        </div>
     </form>
     
     <div class="links">
-        <a href="forgot_password.php">Forgot your password?</a><br><br>
         Don't have an account? <a href="register.php">Register Now</a>
     </div>
 </div>

@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
     assigned_class VARCHAR(100) NULL,
     email VARCHAR(100) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
-    role ENUM('student', 'teacher', 'parent', 'mentor', 'super_admin', 'junior_admin') NOT NULL,
+    role ENUM('student', 'teacher', 'parent', 'mentor') NOT NULL,
     is_verified TINYINT(1) DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -26,16 +26,6 @@ CREATE TABLE IF NOT EXISTS verification_codes (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 ALTER TABLE verification_codes ENGINE=InnoDB;
-
-CREATE TABLE IF NOT EXISTS password_resets (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    email VARCHAR(100) NOT NULL,
-    code_hash CHAR(64) NOT NULL,
-    expires_at DATETIME NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_password_resets_email (email),
-    INDEX idx_password_resets_expires (expires_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS mentor_profiles (
     user_id INT PRIMARY KEY,
@@ -80,7 +70,10 @@ CREATE TABLE IF NOT EXISTS project_feedback (
     FOREIGN KEY (mentor_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE INDEX idx_projects_cbc_created ON projects (cbc_strand, created_at);
 CREATE INDEX idx_project_feedback_project_mentor ON project_feedback (project_id, mentor_id);
 CREATE INDEX idx_users_role_school_class ON users (role, school_name, assigned_class);
 
 ALTER TABLE project_feedback ENGINE=InnoDB;
+CREATE INDEX idx_project_feedback_project_mentor ON project_feedback (project_id, mentor_id);
+CREATE INDEX idx_users_role_school_class ON users (role, school_name, assigned_class);
